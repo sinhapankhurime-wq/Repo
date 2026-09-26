@@ -1,16 +1,27 @@
 # mpub2txt
 
-Converts Mobcast mPub (`.mpub`) e-books to plain text (`.txt`).
+Converts `.mpub` e-books to plain text (`.txt`). It needs only Python 3.8 or
+newer; there is nothing else to install.
 
-An `.mpub` file is a ZIP archive holding a `metadata.xml` (book details and
-reading order) plus one HTML file per section under `sections/`. The converter
-reads the sections in the order `metadata.xml` lists them and turns the HTML
-into readable text. It needs only Python 3.8+ and nothing else.
+## Getting started
 
-## Usage
+1. Install Python 3 from <https://www.python.org/downloads/> if you don't have
+   it. (Check with `python3 --version` on macOS/Linux or `py --version` on
+   Windows.)
+2. Download `mpub2txt.py` from this repository and put it in the same folder as
+   your `.mpub` file.
+3. Open a terminal (macOS: Terminal; Windows: PowerShell) in that folder and run:
+
+   ```sh
+   python3 mpub2txt.py book.mpub      # macOS / Linux
+   py mpub2txt.py book.mpub           # Windows
+   ```
+
+   This writes `book.txt` next to `book.mpub`.
+
+## More options
 
 ```sh
-python3 mpub2txt.py book.mpub                 # writes book.txt next to it
 python3 mpub2txt.py book.mpub -o out.txt      # choose the output file
 python3 mpub2txt.py book.mpub -o -            # print to the terminal
 python3 mpub2txt.py *.mpub -o converted/      # convert many into a folder
@@ -18,21 +29,46 @@ python3 mpub2txt.py book.mpub --no-metadata   # leave out the title/author heade
 ```
 
 The output starts with the title, author, publisher, ISBN and publication date
-from `metadata.xml` (when present), followed by the text of each section.
-Paragraphs are separated by blank lines, list items start with `- `, and
+(when the book includes them), followed by the text of each section in reading
+order. Paragraphs are separated by blank lines, list items start with `- `, and
 horizontal rules become `* * *`.
 
-Problems such as a section listed in `metadata.xml` but missing from the
-archive are printed as warnings; the conversion still goes ahead. The exit code
-is `1` if any input could not be converted.
+Problems such as a chapter listed in the book's index but missing from the
+file are printed as warnings; the conversion still goes ahead. The exit code is
+`1` if any input could not be converted.
 
-## Limitations
+## Supported layouts
 
-- Only the archive layout described on the
-  [MobileRead wiki](https://wiki.mobileread.com/wiki/Mpub) is handled. If
-  `metadata.xml` is missing, every HTML file in the archive is read in filename
-  order instead.
-- Password-protected archives are not supported.
+An `.mpub` file is a ZIP archive of HTML files. Two layouts are recognised:
+
+- **Mobcast mPub** – `metadata.xml` at the top gives the book details and
+  reading order; the text is in `sections/section_0000.html`,
+  `section_0001.html`, … (described on the
+  [MobileRead wiki](https://wiki.mobileread.com/wiki/Mpub)).
+- **ePub-style** – `META-INF/container.xml` points to an `.opf` file whose
+  `<metadata>` gives the book details and whose `<spine>` gives the reading
+  order (for example `OEBPS/book.opf` with `OEBPS/Chapter_1.html`, …). Ordinary
+  `.epub` files use this layout too, so they convert as well.
+
+If neither is found, every HTML file in the archive is read in filename order.
+
+## DRM-protected books
+
+Many stores encrypt the chapter files so the book only opens in their own
+app. mpub2txt detects this and stops with an error instead of producing
+unreadable output:
+
+```
+error: book.mpub: 83 of 83 section files are encrypted (DRM-protected), so
+their text cannot be extracted; open the book in the app or store it came from
+```
+
+It does not try to remove DRM. For such books, read them in the store's app or
+ask the seller for a DRM-free copy.
+
+## Other limitations
+
+- Password-protected ZIP archives are not supported.
 - Images and styling are dropped; only text is kept.
 
 ## Tests

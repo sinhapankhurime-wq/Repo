@@ -1,5 +1,6 @@
 import contextlib
 import io
+import os
 import sys
 import tempfile
 import unittest
@@ -42,6 +43,52 @@ SECTIONS = {
 }
 
 
+CONTAINER = """<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/book.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+"""
+
+OPF = """<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="BookId" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"
+            xmlns:opf="http://www.idpf.org/2007/opf">
+    <dc:title>\u0e2b\u0e19\u0e31\u0e07\u0e2a\u0e37\u0e2d</dc:title>
+    <dc:language>th</dc:language>
+    <dc:identifier id="BookId" opf:scheme="ISBN">-</dc:identifier>
+    <dc:identifier opf:scheme="ISBN">9781234567897</dc:identifier>
+    <dc:creator>First Author</dc:creator>
+    <dc:creator>Second Author</dc:creator>
+    <dc:date>2016-10-26</dc:date>
+  </metadata>
+  <manifest>
+    <item id="cover" href="CoverPage.html" media-type="application/xhtml+xml"/>
+    <item id="c1" href="Text/Chapter_1.html" media-type="application/xhtml+xml"/>
+    <item id="c10" href="Text/Chapter_10.html#start" media-type="application/xhtml+xml"/>
+    <item id="css" href="styles.css" media-type="text/css"/>
+  </manifest>
+  <spine>
+    <itemref idref="cover" linear="no"/>
+    <itemref idref="c10"/>
+    <itemref idref="c1"/>
+  </spine>
+</package>
+"""
+
+EPUB_FILES = {
+    "mimetype": "application/epub+zip",
+    "META-INF/container.xml": CONTAINER,
+    "OEBPS/book.opf": OPF,
+    "OEBPS/styles.css": "p{}",
+    "OEBPS/CoverPage.html": "<html><body><p>Cover</p></body></html>",
+    "OEBPS/Text/Chapter_1.html":
+        "<html><body><p>\u0e1a\u0e17\u0e17\u0e35\u0e48 1</p></body></html>",
+    "OEBPS/Text/Chapter_10.html": "<html><body><p>Ten</p></body></html>",
+}
+
+
 def make_mpub(directory, files, name="book.mpub"):
     path = Path(directory) / name
     with zipfile.ZipFile(path, "w") as archive:
@@ -75,6 +122,18 @@ class HtmlToTextTests(unittest.TestCase):
     def test_table_cells(self):
         markup = "<table><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>"
         self.assertEqual(mpub2txt.html_to_text(markup), "A | B\n1 | 2")
+
+
+class LooksEncryptedTests(unittest.TestCase):
+    def test_random_bytes_are_flagged(self):
+        self.assertTrue(mpub2txt.looks_encrypted(os.urandom(4096)))
+
+    def test_text_in_any_script_is_not_flagged(self):
+        for sample in ("<p>Hello, world.</p>\r\n\t" * 50,
+                       "<p>\u0e40\u0e2b\u0e21\u0e37\u0e2d\u0e19\u0e04\u0e19</p>\n" * 50):
+            self.assertFalse(mpub2txt.looks_encrypted(sample.encode("utf-8")))
+        self.assertFalse(mpub2txt.looks_encrypted("caf\xe9 \u2019".encode("cp1252") * 50))
+        self.assertFalse(mpub2txt.looks_encrypted("<p>hi</p>".encode("utf-16")))
 
 
 class DecodeTests(unittest.TestCase):
@@ -161,6 +220,38 @@ class ConvertTests(unittest.TestCase):
         self.assertEqual(warnings, [])
         self.assertIn("The end.", text)
 
+    def test_epub_layout_uses_opf_metadata_and_spine(self):
+        text, warnings = self.convert(EPUB_FILES)
+        self.assertEqual(warnings, [])
+        self.assertEqual(text, (
+            "Title: \u0e2b\u0e19\u0e31\u0e07\u0e2a\u0e37\u0e2d\n"
+            "Author: First Author, Second Author\n"
+            "ISBN: 9781234567897\n"
+            "Published: 2016-10-26\n"
+            "Language: th\n"
+            "\n" + "=" * 40 + "\n\n\n"
+            "Cover\n\n\nTen\n\n\n\u0e1a\u0e17\u0e17\u0e35\u0e48 1\n"
+        ))
+
+    def test_epub_layout_without_container_finds_opf(self):
+        files = dict(EPUB_FILES)
+        del files["META-INF/container.xml"]
+        text, _ = self.convert(files, include_metadata=False)
+        self.assertTrue(text.startswith("Cover\n\n\nTen\n"))
+
+    def test_epub_spine_missing_file_is_reported(self):
+        files = dict(EPUB_FILES)
+        del files["OEBPS/Text/Chapter_10.html"]
+        text, warnings = self.convert(files, include_metadata=False)
+        self.assertNotIn("Ten", text)
+        self.assertIn("OEBPS/Text/Chapter_10.html", warnings[0])
+
+    def test_encrypted_sections_are_refused(self):
+        files = dict(EPUB_FILES)
+        files["OEBPS/Text/Chapter_1.html"] = os.urandom(4096)
+        with self.assertRaisesRegex(ValueError, r"1 of 3 section files are encrypted"):
+            self.convert(files)
+
     def test_not_a_zip(self):
         path = self.dir / "bad.mpub"
         path.write_bytes(b"not a zip")
@@ -194,6 +285,22 @@ class CliTests(unittest.TestCase):
         code, out, _ = self.run_main(self.book, "-o", "-", "--no-metadata")
         self.assertEqual(code, 0)
         self.assertTrue(out.startswith("Cover\n"))
+
+    def test_expands_wildcards_itself(self):
+        make_mpub(self.dir, {"metadata.xml": METADATA, **SECTIONS}, name="second.mpub")
+        code, _, _ = self.run_main(self.dir / "*.mpub")
+        self.assertEqual(code, 0)
+        self.assertTrue((self.dir / "book.txt").exists())
+        self.assertTrue((self.dir / "second.txt").exists())
+
+    def test_encrypted_book_fails_without_writing_output(self):
+        files = dict(EPUB_FILES)
+        files.update({name: os.urandom(2048) for name in files if name.endswith(".html")})
+        locked = make_mpub(self.dir, files, name="locked.mpub")
+        code, _, err = self.run_main(locked)
+        self.assertEqual(code, 1)
+        self.assertIn("DRM", err)
+        self.assertFalse((self.dir / "locked.txt").exists())
 
     def test_batch_into_directory_and_failure_exit_code(self):
         bad = self.dir / "bad.mpub"

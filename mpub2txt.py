@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Convert Mobcast mPub (.mpub) e-books to plain text.
+"""Convert .mpub e-books to plain text.
 
-An .mpub file is a ZIP archive with this layout:
+An .mpub file is a ZIP archive of HTML files. Two layouts are handled:
 
-    metadata.xml                 book details (<head>) and reading order (<content>)
-    sections/section_0000.html   one HTML file per section
-    sections/section_0001.html
-    css/, images/, cover.png     ignored
+  * Mobcast mPub: metadata.xml holds the book details (<head>) and reading
+    order (<content>); each <section id="N"> maps to sections/section_NNNN.html.
+  * ePub-style: META-INF/container.xml points to an .opf package file whose
+    <metadata> holds the book details and whose <spine> gives the reading order.
 
-Each <section id="N"> inside <content> maps to sections/section_NNNN.html, and
-the sections are read in the order metadata.xml lists them. If metadata.xml is
-missing, section files are read in natural filename order instead.
+If neither is present, HTML files are read in natural filename order.
+Encrypted (DRM-protected) books are detected and refused rather than
+converted into unreadable text.
 
 Only the Python standard library is used.
 
@@ -23,10 +23,12 @@ Usage:
 
 import argparse
 import codecs
+import glob
 import html
 import posixpath
 import re
 import sys
+import urllib.parse
 import xml.etree.ElementTree as ET
 import zipfile
 from html.parser import HTMLParser
@@ -53,6 +55,21 @@ PARAGRAPH_TAGS = {
 }
 LINE_TAGS = {"dd", "div", "dt", "figcaption", "tr"}
 
+# Dublin Core elements in an .opf package that fill METADATA_FIELDS.
+OPF_FIELDS = (
+    ("title", "title"),
+    ("author", "creator"),
+    ("publisher", "publisher"),
+    ("isbn", "identifier"),
+    ("pubdate", "date"),
+    ("language", "language"),
+    ("copyright", "rights"),
+)
+
+# Control bytes that never appear in real HTML/XML text (NUL is left out so
+# that UTF-16 files without a byte-order mark are not mistaken for encrypted).
+_CONTROL_BYTES = bytes(range(1, 32)).translate(None, b"\t\n\f\r") + b"\x7f"
+
 _CHARSET_RE = re.compile(
     rb"""<meta[^>]+charset\s*=\s*["']?([\w.:-]+)"""
     rb"""|<\?xml[^>]+encoding\s*=\s*["']([\w.:-]+)""",
@@ -64,6 +81,19 @@ def natural_key(name):
     """Sort key that orders 'section_2' before 'section_10'."""
     return [int(part) if part.isdigit() else part.lower()
             for part in re.split(r"(\d+)", name)]
+
+
+def looks_encrypted(data):
+    """True if the bytes look like ciphertext or binary data rather than text.
+
+    Encrypted data is close to random, so roughly 11% of its bytes are control
+    characters; genuine HTML in any single-byte or UTF-8 encoding has almost none.
+    """
+    sample = data[:4096]
+    if not sample or sample.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return False
+    controls = len(sample) - len(sample.translate(None, _CONTROL_BYTES))
+    return controls > len(sample) * 0.02
 
 
 def decode_bytes(data):
@@ -301,15 +331,107 @@ class MpubBook:
                 f"appended at the end: {', '.join(unlisted)}")
         return ordered + unlisted
 
+    def _opf_name(self):
+        """The ePub package (.opf) file named by META-INF/container.xml, if any."""
+        container = self._members.get("meta-inf/container.xml")
+        if container:
+            try:
+                root = ET.fromstring(self.archive.read(container))
+            except ET.ParseError:
+                root = None
+            if root is not None:
+                for rootfile in root.iterfind(".//{*}rootfile"):
+                    name = self._members.get((rootfile.get("full-path") or "").lower())
+                    if name:
+                        return name
+        opf_files = [name for name in self._members.values()
+                     if name.lower().endswith(".opf")]
+        return min(opf_files, key=len) if opf_files else None
+
+    @staticmethod
+    def _isbn(element, value):
+        if value.lower().startswith("urn:isbn:"):
+            return value[len("urn:isbn:"):]
+        schemes = [v.lower() for k, v in element.attrib.items() if k.endswith("scheme")]
+        return value if "isbn" in schemes else ""
+
+    def _opf_layout(self, opf_name):
+        """Return (fields, section names) from an ePub package file, or None."""
+        try:
+            root = ET.fromstring(self.archive.read(opf_name))
+        except ET.ParseError:
+            self.warnings.append(f"{opf_name} is not well-formed XML")
+            return None
+
+        fields = {}
+        metadata = root.find("{*}metadata")
+        for key, tag in OPF_FIELDS:
+            values = []
+            elements = metadata.iterfind(f".//{{*}}{tag}") if metadata is not None else ()
+            for element in elements:
+                value = " ".join((element.text or "").split())
+                if key == "isbn":
+                    value = self._isbn(element, value)
+                if value.strip("-– ") and value not in values:
+                    values.append(value)
+            if values:
+                fields[key] = ", ".join(values) if key in ("author", "language") else values[0]
+
+        base = posixpath.dirname(opf_name)
+        manifest = {item.get("id"): item.get("href")
+                    for item in root.iterfind(".//{*}item")}
+        names = []
+        for itemref in root.iterfind(".//{*}itemref"):
+            href = manifest.get(itemref.get("idref"))
+            if not href:
+                self.warnings.append(
+                    f"reading-order entry {itemref.get('idref')!r} has no file")
+                continue
+            path = posixpath.normpath(
+                posixpath.join(base, urllib.parse.unquote(href.split("#")[0])))
+            name = self._members.get(path.lower())
+            if name is None:
+                self.warnings.append(
+                    f"{path} is listed in {opf_name} but missing from the archive")
+            elif name not in names:
+                names.append(name)
+        if not names:
+            self.warnings.append(f"{opf_name} has no usable reading order")
+            return None
+        return fields, names
+
+    def layout(self):
+        """Return (metadata fields, section member names in reading order)."""
+        if self._member("metadata.xml") is not None:
+            fields, section_ids = self.metadata()
+            return fields, self.reading_order(section_ids)
+        opf_name = self._opf_name()
+        if opf_name:
+            result = self._opf_layout(opf_name)
+            if result:
+                return result
+        files = self._section_files()
+        if files:
+            self.warnings.append("no reading order found; using filename order")
+        return {}, files
+
     def to_text(self, include_metadata=True):
-        fields, section_ids = self.metadata()
+        fields, names = self.layout()
+        sections = [(name, self.archive.read(name)) for name in names]
+        encrypted = [name for name, data in sections if looks_encrypted(data)]
+        if encrypted:
+            raise ValueError(
+                f"{len(encrypted)} of {len(sections)} section files are encrypted "
+                "(DRM-protected), so their text cannot be extracted; open the book "
+                "in the app or store it came from")
+
         parts = []
         if include_metadata and fields:
             header = "\n".join(f"{label}: {fields[key]}"
                                for key, label in METADATA_FIELDS if key in fields)
             parts.append(header + "\n\n" + "=" * 40)
-        for name in self.reading_order(section_ids):
-            text = html_to_text(decode_bytes(self.archive.read(name)))
+        for name, data in sections:
+            text = html_to_text(decode_bytes(data))
             if text:
                 parts.append(text)
         if not parts:
@@ -342,6 +464,15 @@ def _output_path(input_path, output, many_inputs):
     return out
 
 
+def _expand_wildcards(paths):
+    """Expand *.mpub-style patterns (Windows shells pass them through unexpanded)."""
+    expanded = []
+    for raw in paths:
+        matches = [] if Path(raw).exists() else sorted(glob.glob(raw))
+        expanded.extend(matches or [raw])
+    return expanded
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Convert Mobcast mPub (.mpub) e-books to plain text.")
@@ -355,6 +486,7 @@ def main(argv=None):
                         help="encoding of the output text (default: utf-8)")
     args = parser.parse_args(argv)
 
+    args.inputs = _expand_wildcards(args.inputs)
     many = len(args.inputs) > 1
     if many and args.output and args.output != "-" and Path(args.output).is_file():
         parser.error("with several inputs, --output must be a directory or '-'")
