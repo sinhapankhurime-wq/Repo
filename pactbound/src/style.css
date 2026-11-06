@@ -71,8 +71,8 @@ body.touch #pad {
   touch-action: none;
 }
 
-#pad button.down,
-#pad .dpad .down {
+#pad button.pressed,
+#pad .dpad .pressed {
   background: var(--btn-press);
   box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.35);
 }
@@ -129,28 +129,36 @@ body.touch #pad {
   letter-spacing: 1px;
 }
 
-/* Portrait phones: a handheld layout with the controls under the screen. */
+/* Portrait phones: a handheld layout. The screen sits at the top at full width,
+   and the controls are centred in the space below it. */
 @media (orientation: portrait) {
+  body.touch #stage {
+    flex: 0 0 auto;
+    height: min(66.667vw, 56vh);
+  }
   body.touch #pad {
     position: relative;
-    flex: 0 0 auto;
-    height: min(42vh, 280px);
+    flex: 1 1 auto;
+    min-height: 230px;
     background: var(--pad-bg);
     border-top: 2px solid #0b080e;
   }
-  .dpad { left: 18px; bottom: 26px; }
-  .ab { right: 18px; bottom: 30px; }
+  .dpad { left: 18px; top: calc(50% - 64px); }
+  .ab { right: 18px; top: calc(50% - 58px); }
   #pad .menu { left: 50%; top: 14px; transform: translateX(-50%); }
 }
 
-/* Landscape: controls float over the corners of the screen. */
+/* Landscape: the controls sit in the margins either side of the screen. */
 @media (orientation: landscape) {
+  body.touch #stage {
+    margin: 0 min(168px, 21vw);
+  }
   body.touch #pad {
     position: fixed;
     inset: 0;
     pointer-events: none;
   }
-  body.touch #pad > * { pointer-events: auto; opacity: 0.62; }
+  body.touch #pad > * { pointer-events: auto; opacity: 0.85; }
   .dpad { left: 14px; bottom: 14px; }
   .ab { right: 14px; bottom: 14px; }
   #pad .menu { right: 14px; top: 10px; }

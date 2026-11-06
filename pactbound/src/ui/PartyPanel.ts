@@ -26,7 +26,9 @@ export class PartyPanel {
     private readonly party: Familiar[],
     title: string,
     depth = 700,
+    initial = 0,
   ) {
+    this.index = Math.max(0, Math.min(initial, party.length - 1));
     this.g = scene.add.graphics();
     this.container = scene.add.container(0, 0, [this.g]).setDepth(depth);
     const h = 30 + Math.max(1, party.length) * ROW_H;

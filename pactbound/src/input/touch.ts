@@ -31,12 +31,12 @@ export function installTouchControls(onLayoutChange: () => void): void {
     const down = (e: PointerEvent) => {
       e.preventDefault();
       el.setPointerCapture?.(e.pointerId);
-      el.classList.add('down');
+      el.classList.add('pressed');
       controls.press(b);
     };
     const up = (e: PointerEvent) => {
       e.preventDefault();
-      el.classList.remove('down');
+      el.classList.remove('pressed');
       controls.release(b);
     };
     el.addEventListener('pointerdown', down);
@@ -53,12 +53,12 @@ export function installTouchControls(onLayoutChange: () => void): void {
     if (b === active) return;
     if (active) {
       controls.release(active);
-      dpad.querySelector(`.${active}`)?.classList.remove('down');
+      dpad.querySelector(`.${active}`)?.classList.remove('pressed');
     }
     active = b;
     if (b) {
       controls.press(b);
-      dpad.querySelector(`.${b}`)?.classList.add('down');
+      dpad.querySelector(`.${b}`)?.classList.add('pressed');
     }
   };
   const fromEvent = (e: PointerEvent): Button | null => {

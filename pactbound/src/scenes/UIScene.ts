@@ -119,14 +119,18 @@ export class UIScene extends Phaser.Scene {
   /** Floating heart (Devotion) or spark (Clarity) when a choice shifts Wren's feelings. */
   bondPing(kind: 'devotion' | 'clarity', amount: number): void {
     sound.sfx(kind === 'devotion' ? 'heart' : 'clarity');
-    const icon = this.add.image(GAME_W - 112, 46, kind === 'devotion' ? 'icon:heart' : 'icon:spark').setScale(2).setDepth(960);
-    const label = addText(this, GAME_W - 100, 38, `${amount > 0 ? '+' : ''}${amount} ${kind === 'devotion' ? 'Devotion' : 'Clarity'}`, {
+    const label = addText(this, 0, 38, `${amount > 0 ? '+' : ''}${amount} ${kind === 'devotion' ? 'Devotion' : 'Clarity'}`, {
       size: 16,
       color: kind === 'devotion' ? UI.textRose : '#9fe0f6',
-      stroke: '#120d18',
-    }).setDepth(960);
+    }).setDepth(961);
+    const w = Math.ceil(label.width) + 40;
+    const x = GAME_W - w - 8;
+    label.setX(x + 30);
+    const bg = this.add.graphics().setDepth(959);
+    drawPanel(bg, x, 30, w, 30);
+    const icon = this.add.image(x + 17, 45, kind === 'devotion' ? 'icon:heart' : 'icon:spark').setScale(2).setDepth(961);
     this.tweens.add({
-      targets: [icon, label],
+      targets: [icon, label, bg],
       y: '-=14',
       alpha: { from: 1, to: 0 },
       delay: 900,
@@ -134,6 +138,7 @@ export class UIScene extends Phaser.Scene {
       onComplete: () => {
         icon.destroy();
         label.destroy();
+        bg.destroy();
       },
     });
   }

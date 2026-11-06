@@ -7,7 +7,7 @@ export const conservatory: MapDef = {
   ground: '+',
   outdoor: false,
   music: 'interior',
-  battleBg: 'library',
+  battleBg: 'glasshouse',
   rows: [
     '0YYYYYYYYYYY0',
     '0yyyyyyyyyyy0',

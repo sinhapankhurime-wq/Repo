@@ -141,6 +141,19 @@ export class BattleScene extends Phaser.Scene {
       }
       bands([0x3c3644, 0x443d4c, 0x4c4454, 0x544c5c], 150, GAME_H);
       g.lineStyle(2, 0x9a72e0, 0.5).strokeEllipse(GAME_W / 2, 206, 420, 70);
+    } else if (bg === 'glasshouse') {
+      bands([0x8ec4d8, 0x9ccfe0, 0xaad8e6, 0xb8e0ea], 0, 150);
+      g.fillStyle(0xe4eee6, 1);
+      for (let x = 0; x < GAME_W; x += 60) g.fillRect(x, 0, 3, 150);
+      for (let y = 30; y < 150; y += 40) g.fillRect(0, y, GAME_W, 2);
+      for (let x = -10; x < GAME_W + 20; x += 34) {
+        g.fillStyle(0x3f7a45, 1).fillEllipse(x, 140, 46, 40);
+        g.fillStyle(0x5a9a5a, 1).fillEllipse(x + 8, 132, 26, 22);
+        g.fillStyle(0xf2a7bf, 1).fillRect(x + 4, 126, 3, 3);
+      }
+      bands([0x6c6772, 0x75707c, 0x7e7986, 0x87828e], 150, GAME_H);
+      g.fillStyle(0x4a4650, 1);
+      for (let y = 166; y < GAME_H; y += 16) g.fillRect(0, y, GAME_W, 1);
     } else {
       bands([0x2c1e18, 0x342420, 0x3c2a24, 0x44302a], 0, 150);
       const books = [0x8a3a4a, 0x3d5a8a, 0x4a7a4a, 0xc9a24a, 0x6a4a8a];
@@ -625,7 +638,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private async pickFamiliar(title: string, cancelable: boolean): Promise<number> {
-    const panel = new PartyPanel(this, session.state.party, title, 90);
+    const party = session.state.party;
+    const active = this.battle.player.active;
+    // When a replacement is required, start on the first familiar that can actually fight.
+    const initial = cancelable ? active : Math.max(0, party.findIndex((f, i) => !isFainted(f) && i !== active));
+    const panel = new PartyPanel(this, party, title, 90, initial);
     for (;;) {
       const i = await panel.pick(cancelable);
       if (i < 0) {

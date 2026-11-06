@@ -6,7 +6,7 @@ import type { TrainerId } from '../data/trainers';
 
 export type MapId = 'courtyard' | 'conservatory' | 'dormitory' | 'library' | 'duelingHall' | 'gloamwood';
 export type TrackId = 'title' | 'academy' | 'interior' | 'forest' | 'lucien' | 'battle' | 'duel';
-export type BattleBg = 'courtyard' | 'hall' | 'forest' | 'library';
+export type BattleBg = 'courtyard' | 'hall' | 'forest' | 'library' | 'glasshouse';
 
 export interface Warp {
   x: number;

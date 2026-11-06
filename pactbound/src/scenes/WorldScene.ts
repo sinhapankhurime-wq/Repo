@@ -273,6 +273,7 @@ export class WorldScene extends Phaser.Scene {
     if (dir !== this.player.facing) {
       // A quick tap turns on the spot; holding the direction then walks.
       this.player.face(dir);
+      this.state.facing = dir;
       this.turnDelay = 0.07;
       return;
     }
@@ -285,6 +286,7 @@ export class WorldScene extends Phaser.Scene {
 
   private tryMove(dir: Dir, carry: number): boolean {
     this.player.face(dir);
+    this.state.facing = dir;
     const [dx, dy] = DIR_VEC[dir];
     const nx = this.player.tx + dx;
     const ny = this.player.ty + dy;
@@ -366,7 +368,8 @@ export class WorldScene extends Phaser.Scene {
   private updateCamera(): void {
     const cam = this.cameras.main;
     const mapW = (this.map.rows[0]?.length ?? 0) * TILE;
-    const mapH = this.map.rows.length * TILE;
+    // Indoors the camera may drift past the bottom wall, so the dialogue box never covers Wren at a doorway.
+    const mapH = this.map.rows.length * TILE + (this.map.outdoor ? 0 : 44);
     let cx = this.camOverride ? this.camOverride.x : this.player.sprite.x;
     // Frame the player a little above centre so the dialogue box never hides her.
     let cy = this.camOverride ? this.camOverride.y : this.player.sprite.y + 10;
