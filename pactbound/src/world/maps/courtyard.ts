@@ -1,0 +1,75 @@
+import { all, F, has, lacks } from '../../story/flags';
+import type { MapDef } from '../types';
+
+/**
+ * The Thornveil courtyard: Dueling Hall (north), Dormitory (west),
+ * Library (east), Conservatory (south-east), the Gloamwood road (east edge)
+ * and the main gate (south), where Wren arrives.
+ */
+export const courtyard: MapDef = {
+  id: 'courtyard',
+  name: 'Thornveil Courtyard',
+  ground: '.',
+  outdoor: true,
+  music: 'academy',
+  battleBg: 'courtyard',
+  rows: [
+    'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    'TTTTTTTTRRRRRRRRRRRRTTTTTTTT',
+    'TT.....,RRRRRRRRRRRR,.....TT',
+    'T.......#~##~##~##~#.......T',
+    'T..L....#####DD#####....L..T',
+    'T............::............T',
+    'TRRRRRRR.....::.....RRRRRRRT',
+    'TRRRRRRR.L...::...L.RRRRRRRT',
+    'T#~#~#~#.....::.....#~#~#~#T',
+    'T###D###.....::.....###D###T',
+    'T...:........::........:...T',
+    'T...::::::::::::::::::::::::',
+    'T..........==WW==..........T',
+    'T....b.....==WW==.....b....T',
+    'T..........======.YYYYYYY..T',
+    'T,,,**.......::...YYYYYYY..T',
+    'T,,,**.......::...yyyyyyy..T',
+    'T......S.....::...yyyDyyy..T',
+    'T...L........:::::::::..L..T',
+    'T............::............T',
+    'Tgggggggggggg::ggggggggggggT',
+    'TTTTTTTTTTTTTGGTTTTTTTTTTTTT',
+    'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+    'TTTTTTTTTTTTTTTTTTTTTTTTTTTT',
+  ],
+  warps: [
+    { x: 13, y: 4, to: 'duelingHall', tx: 6, ty: 10, dir: 'up' },
+    { x: 14, y: 4, to: 'duelingHall', tx: 7, ty: 10, dir: 'up' },
+    { x: 4, y: 9, to: 'dormitory', tx: 5, ty: 7, dir: 'up' },
+    { x: 23, y: 9, to: 'library', tx: 7, ty: 10, dir: 'up' },
+    { x: 21, y: 17, to: 'conservatory', tx: 6, ty: 7, dir: 'up' },
+    { x: 27, y: 11, to: 'gloamwood', tx: 1, ty: 10, dir: 'right' },
+  ],
+  npcs: [
+    { id: 'finch', look: 'finch', x: 13, y: 16, dir: 'down', when: lacks(F.introDone) },
+    { id: 'tallow', look: 'tallow', x: 9, y: 13, dir: 'down', talk: 'tallow', when: has(F.introDone) },
+    { id: 'gossip1', look: 'studentB', x: 16, y: 7, dir: 'left', talk: 'gossipCourtyard1', when: has(F.introDone) },
+    { id: 'gossip2', look: 'studentD', x: 21, y: 12, dir: 'left', talk: 'gossipCourtyard2', when: has(F.introDone) },
+    { id: 'gateStudent', look: 'studentC', x: 10, y: 19, dir: 'right', talk: 'gateStudent', when: has(F.grimletDone) },
+    { id: 'tamsinYard', look: 'tamsin', x: 22, y: 18, dir: 'left', when: all(has(F.tamsinDuel), lacks(F.grimletDone)) },
+    { id: 'lucienYard', look: 'lucien', x: 13, y: 5, dir: 'down', when: all(has(F.tamsinDuel), lacks(F.grimletDone)) },
+  ],
+  things: [
+    { x: 15, y: 13, talk: 'grimletCalm', sprite: 'familiar:grimlet', when: all(has(F.tamsinDuel), lacks(F.grimletCalmed)) },
+    { x: 7, y: 17, talk: 'statue' },
+    { x: 13, y: 21, talk: 'mainGate' },
+    { x: 14, y: 21, talk: 'mainGate' },
+    { x: 13, y: 12, talk: 'fountain' },
+    { x: 14, y: 12, talk: 'fountain' },
+    { x: 26, y: 10, talk: 'signGloamwood', sprite: 'sign' },
+  ],
+  pickups: [],
+  triggers: [
+    { x: 26, y: 11, script: 'gloamwoodBlocked', when: (s) => s.party.length === 0 },
+  ],
+  encounters: [],
+  onEnter: 'courtyardEnter',
+};

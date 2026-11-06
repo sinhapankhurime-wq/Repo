@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pactbound art gallery</title>
+    <style>
+      body { margin: 0; padding: 16px; background: #2a2236; color: #e8e0f0; font: 14px/1.4 system-ui, sans-serif; }
+      h2 { margin: 18px 0 8px; font-size: 15px; color: #f2a7bf; }
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+      figure { margin: 0; text-align: center; font-size: 11px; color: #b8aac8; }
+      canvas { image-rendering: pixelated; display: block; }
+    </style>
+  </head>
+  <body>
+    <p>Dev-only: every sprite the game generates at boot. Run <code>npm run dev</code> and open <code>/gallery.html</code>.</p>
+    <div id="out"></div>
+    <script type="module" src="/src/gallery.ts"></script>
+  </body>
+</html>
